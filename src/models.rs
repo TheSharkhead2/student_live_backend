@@ -27,3 +27,8 @@ pub struct ClassPayload {
     pub code: String,
     pub url: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct QuestionPayload {
+    pub question: String,
+}

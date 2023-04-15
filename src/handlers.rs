@@ -40,7 +40,7 @@ use super::DbPool;
 use actix_web::{delete, get, post, put, web, Error, HttpResponse, Responder};
 use diesel::prelude::*;
 
-use crate::models::{Class, ClassPayload, NewClass};
+use crate::models::{Class, ClassPayload, NewClass, QuestionPayload};
 
 type DbError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -102,9 +102,20 @@ async fn classes_update(
     Ok(HttpResponse::Ok().json(class))
 }
 
-#[delete("/classes/{id}")]
-async fn classes_destroy(id: web::Path<String>) -> impl Responder {
-    HttpResponse::Ok().body(format!("Tweet#delete {}", id))
+#[put("/classes/{id}/question")]
+async fn add_new_question(
+    id: web::Path<String>,
+    payload: web::Json<QuestionPayload>,
+    pool: web::Data<DbPool>,
+) -> Result<HttpResponse, Error> {
+    let class = web::block(move || {
+        let mut conn = pool.get()?;
+        add_question(id.into_inner(), payload.question.clone(), &mut conn)
+    })
+    .await?
+    .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(class))
 }
 
 fn add_a_class(_code: String, _url: String, conn: &mut PgConnection) -> Result<Class, DbError> {
@@ -157,4 +168,58 @@ fn update_url(
         .get_result::<Class>(conn)?;
 
     Ok(class)
+}
+
+fn add_question(
+    class_code: String,
+    _question: String,
+    mut conn: &mut PgConnection,
+) -> Result<Class, DbError> {
+    use crate::schema::classes::dsl::*;
+
+    let class_with_id = find_class_by_id(class_code, &mut conn)?.unwrap();
+
+    let mut class_questions = class_with_id.questions;
+    let mut class_upvotes = class_with_id.upvotes;
+
+    if class_questions.contains(&Some(_question.clone())) {
+        let question_index = class_questions
+            .iter()
+            .position(|quest| quest == &Some(_question.clone()))
+            .unwrap();
+        let class_upvotes_voted: Vec<Option<i32>> = class_upvotes
+            .iter()
+            .enumerate()
+            .map(|(index, vote_count)| {
+                if index == question_index {
+                    if let Some(vote_count) = vote_count {
+                        Some(vote_count + 1)
+                    } else {
+                        Some(1)
+                    }
+                } else {
+                    *vote_count
+                }
+            })
+            .collect();
+
+        let class = diesel::update(classes.find(class_with_id.id))
+            .set(upvotes.eq(class_upvotes_voted))
+            .get_result::<Class>(conn)?;
+
+        Ok(class)
+    } else {
+        class_questions.push(Some(_question));
+        class_upvotes.push(Some(1));
+
+        let _class = diesel::update(classes.find(class_with_id.id))
+            .set(questions.eq(class_questions))
+            .get_result::<Class>(conn)?;
+
+        let class = diesel::update(classes.find(class_with_id.id))
+            .set(upvotes.eq(class_upvotes))
+            .get_result::<Class>(conn)?;
+
+        Ok(class)
+    }
 }
