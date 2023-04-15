@@ -1,2 +1,2 @@
-web: ./target/release/rust-actix-crud
+web: ./target/release/student_live_feedback_backend
 release: ./target/release/diesel migration run
