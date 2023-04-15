@@ -65,7 +65,7 @@ async fn main() -> std::io::Result<()> {
         .build(manager)
         .expect("Failed to create pool");
 
-    // let port = std::env::var("PORT").expect("$PORT is not set.");
+    let port = std::env::var("PORT").expect("$PORT is not set.");
 
     HttpServer::new(move || {
         App::new()
@@ -77,8 +77,8 @@ async fn main() -> std::io::Result<()> {
             .service(handlers::classes_update)
             .service(handlers::add_new_question)
     })
-    // .bind(("0.0.0.0", port.parse().unwrap()))?
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", port.parse().unwrap()))?
+    // .bind(("127.0.0.1", 8080))?
     .run()
     .await
 }
